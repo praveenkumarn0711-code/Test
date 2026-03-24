@@ -1,0 +1,164 @@
+<html>
+{% load static %}
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{% static "css/style.css" %}">
+</head>
+<body>
+<style>
+    .form-field {
+        margin-bottom: 8px;
+    }
+    .form-field-placeholder {
+        height: 34px;
+        border: 1px dashed #999;
+        margin-bottom: 8px;
+    }
+</style>
+<h2>Create Dynamic Form</h2>
+<form id="dynamic-form">
+    <div id="form-fields-container">
+        <div class="form-field">
+            <span class="drag-handle" title="Drag to reorder" style="cursor:move;margin-right:10px;">&#9776;</span>
+            <label>Label:
+                <input type="text" name="label" required>
+            </label>
+            <label>Field Type:
+                <select name="field_type" required>
+                    <option value="text">Text</option>
+                    <option value="number">Number</option>
+                    <option value="date">Date</option>
+                    <option value="password">Password</option>
+                </select>
+            </label>
+            <button type="button" class="remove-field-btn" style="display:none;margin-left:10px;">Remove</button>
+        </div>
+    </div>
+    <br>
+    <button type="button" id="add-more-btn">Add More</button>
+    <button type="submit" id="save-btn">Save</button>
+</form>
+
+<div id="success-message" style="color: green; display: none;"></div>
+<div id="error-message" style="color: red; display: none;"></div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+<script>
+$(function(){
+    $("#form-fields-container").sortable({
+        items: ".form-field",
+        handle: ".drag-handle",
+        axis: "y",
+        placeholder: "form-field-placeholder"
+    });
+
+    // Add More button click event
+    $("#add-more-btn").click(function(){
+        let fieldHTML = `
+        <div class="form-field">
+            <span class="drag-handle" title="Drag to reorder" style="cursor:move;margin-right:10px;">&#9776;</span>
+            <label>Label:
+                <input type="text" name="label" required>
+            </label>
+            <label>Field Type:
+                <select name="field_type" required>
+                    <option value="text">Text</option>
+                    <option value="number">Number</option>
+                    <option value="date">Date</option>
+                    <option value="password">Password</option>
+                </select>
+            </label>
+            <button type="button" class="remove-field-btn" style="margin-left:10px;">Remove</button>
+        </div>
+        `;
+        $("#form-fields-container").append(fieldHTML);
+        // Show remove button for all except first
+        $(".form-field .remove-field-btn").show();
+    });
+
+    // Remove field
+    $('#form-fields-container').on('click', '.remove-field-btn', function(){
+        $(this).closest('.form-field').remove();
+        // Hide remove button if only one remains
+        if ($('.form-field').length === 1) {
+            $(".form-field .remove-field-btn").hide();
+        }
+    });
+
+    // Hide remove button if only one field at start
+    if ($('.form-field').length === 1) {
+        $(".form-field .remove-field-btn").hide();
+    }
+
+    // Save button / form submission
+    $("#dynamic-form").submit(function(e){
+        e.preventDefault();
+        let fields = [];
+        let valid = true;
+        $('#form-fields-container .form-field').each(function(){
+            let label = $(this).find('input[name="label"]').val();
+            let field_type = $(this).find('select[name="field_type"]').val();
+            if (!label || !field_type) {
+                valid = false;
+                return false; // break
+            }
+            fields.push({label: label, field_type: field_type});
+        });
+
+        if (!valid || fields.length === 0) {
+            $("#error-message").text("Please complete all fields.").show();
+            $("#success-message").hide();
+            return;
+        }
+
+        // Optionally, ask for a form name
+        let formName = prompt("Enter a name for this form:");
+        if (!formName) {
+            $("#error-message").text("Form name is required.").show();
+            $("#success-message").hide();
+            return;
+        }
+
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = $.trim(cookies[i]);
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        $.ajax({
+            url: "{% url 'get-form' %}",
+            method: "POST",
+            data: JSON.stringify({form_name: formName, fields: fields}),
+            contentType: "application/json",
+            headers: {'X-CSRFToken': getCookie('csrftoken')},
+            success: function(response){
+                $("#success-message").text("Form saved successfully!").show();
+                $("#error-message").hide();
+                // Optionally clear the form
+                // $("#form-fields-container").html('');
+            },
+            error: function(xhr){
+                let msg = "An error occurred while saving the form.";
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    msg = xhr.responseJSON.error;
+                }
+                $("#error-message").text(msg).show();
+                $("#success-message").hide();
+            }
+        });
+    });
+});
+</script>
+</body>
+</html>

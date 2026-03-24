@@ -1,0 +1,135 @@
+<html>
+{% load static %}
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{% static "css/style.css" %}">
+</head>
+<body>
+<h2>Employees</h2>
+<p><a href="{% url 'employee-create' %}">Create employee</a></p>
+<p><a href="{% url 'logout' %}">Logout</a></p>
+
+<form method="get" action="{% url 'employee-list' %}" style="margin-bottom: 16px;">
+    <label for="field_label">Dynamic field:</label>
+    <select name="field_label" id="field_label">
+        <option value="">— Any —</option>
+        {% for label in dynamic_field_labels %}
+        <option value="{{ label }}" {% if label == current_field_label %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+    </select>
+    <label for="field_value" style="margin-left: 8px;">Contains:</label>
+    <input type="text" name="field_value" id="field_value" value="{{ current_field_value }}" placeholder="Search value (optional)" size="28">
+    <button type="submit">Search</button>
+    {% if current_field_label or current_field_value %}
+    <a href="{% url 'employee-list' %}" style="margin-left: 8px;">Clear</a>
+    {% endif %}
+</form>
+
+{% if employees %}
+<table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse;">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Username</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Form</th>
+            <th>Created</th>
+            <th>Form data</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for employee in employees %}
+        <tr data-employee-id="{{ employee.id }}">
+            <td>{{ employee.id }}</td>
+            <td>{{ employee.user.username }}</td>
+            <td>{{ employee.user.get_full_name|default:"—" }}</td>
+            <td>{{ employee.user.email|default:"—" }}</td>
+            <td>{{ employee.dynamic_form.name }}</td>
+            <td>{{ employee.created_at|date:"Y-m-d H:i" }}</td>
+            <td>
+                {% if employee.form_data %}
+                <dl style="margin: 0;">
+                    {% for key, value in employee.form_data.items %}
+                    <dt style="font-weight: bold; display: inline;">{{ key }}:</dt>
+                    <dd style="display: inline; margin: 0 0 0 4px;">{{ value }}</dd>
+                    <br>
+                    {% endfor %}
+                </dl>
+                {% else %}
+                —
+                {% endif %}
+            </td>
+            <td>
+                <button
+                    type="button"
+                    class="delete-employee-btn"
+                    data-id="{{ employee.id }}"
+                    data-delete-url="{% url 'employee-delete' employee.id %}"
+                >Delete</button>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+{% if current_field_label or current_field_value %}
+<p>No employees match these filters.</p>
+<p><a href="{% url 'employee-list' %}">Clear filters</a></p>
+{% else %}
+<p>No employees yet.</p>
+<p><a href="{% url 'employee-create' %}">Create the first employee</a></p>
+{% endif %}
+{% endif %}
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(function () {
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = $.trim(cookies[i]);
+                if (cookie.substring(0, name.length + 1) === (name + "=")) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    $("table").on("click", ".delete-employee-btn", function () {
+        const $btn = $(this);
+        const id = $btn.data("id");
+        if (!id || !confirm("Soft-delete this employee record?")) {
+            return;
+        }
+        const row = $btn.closest("tr");
+        $.ajax({
+            url: "/employee/" + id + "/delete/",
+            method: "POST",
+            headers: {"X-CSRFToken": getCookie("csrftoken")},
+            success: function () {
+                row.remove();
+                if ($("tbody tr").length === 0) {
+                    location.reload();
+                }
+            },
+            error: function (xhr) {
+                let msg = "Could not delete.";
+                if (xhr.responseJSON && xhr.responseJSON.error) {
+                    msg = xhr.responseJSON.error;
+                }
+                alert(msg);
+            },
+        });
+    });
+});
+</script>
+
+</body>
+</html>

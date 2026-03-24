@@ -1,0 +1,187 @@
+<html>
+{% load static %}
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{% static "css/style.css" %}">
+</head>
+<body>
+<h2>Create Employee</h2>
+<p><a href="{% url 'employee-list' %}">View all employees</a></p>
+
+<form id="employee-form">
+    <label for="form-selector">Select Form:</label>
+    <select id="form-selector" required>
+        <option value="">-- Select --</option>
+        {% for form in dynamic_forms %}
+        <option value="{{ form.id }}">{{ form.name }}</option>
+        {% endfor %}
+    </select>
+
+    <fieldset style="margin-top: 16px; border: 1px solid #ccc; padding: 12px;">
+        <legend>Account</legend>
+        <div style="margin-bottom: 8px;">
+            <label for="acct-username">Username *:</label>
+            <input type="text" id="acct-username" name="username" required autocomplete="username">
+        </div>
+        <div style="margin-bottom: 8px;">
+            <label for="acct-email">Email:</label>
+            <input type="email" id="acct-email" name="email" autocomplete="email">
+        </div>
+        <div style="margin-bottom: 8px;">
+            <label for="acct-first">First name:</label>
+            <input type="text" id="acct-first" name="first_name" autocomplete="given-name">
+        </div>
+        <div style="margin-bottom: 8px;">
+            <label for="acct-last">Last name:</label>
+            <input type="text" id="acct-last" name="last_name" autocomplete="family-name">
+        </div>
+        <div style="margin-bottom: 8px;">
+            <label for="acct-password">Password *:</label>
+            <input type="password" id="acct-password" name="password" required autocomplete="new-password">
+        </div>
+    </fieldset>
+
+    <div id="dynamic-fields" style="margin-top: 16px;"></div>
+    <button type="submit" style="margin-top: 12px;">Save Employee</button>
+</form>
+
+<div id="success-message" style="color: green; margin-top: 10px; display: none;"></div>
+<div id="error-message" style="color: red; margin-top: 10px; display: none;"></div>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(function () {
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== "") {
+            const cookies = document.cookie.split(";");
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = $.trim(cookies[i]);
+                if (cookie.substring(0, name.length + 1) === (name + "=")) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function formatApiErrors(responseJson) {
+        if (!responseJson) {
+            return "Failed to save employee details.";
+        }
+        if (typeof responseJson.error === "string" && responseJson.error) {
+            return responseJson.error;
+        }
+        const lines = [];
+        Object.keys(responseJson).forEach(function (key) {
+            const value = responseJson[key];
+            if (Array.isArray(value)) {
+                lines.push(key + ": " + value.join(", "));
+            } else if (typeof value === "string") {
+                lines.push(key + ": " + value);
+            }
+        });
+        return lines.length ? lines.join("\n") : "Failed to save employee details.";
+    }
+
+    function renderFields(fields) {
+        const container = $("#dynamic-fields");
+        container.empty();
+
+        if (!fields.length) {
+            container.append("<p>No fields configured for this form.</p>");
+            return;
+        }
+
+        fields.forEach(function (field) {
+            const inputType = field.field_type === "password" ? "password" : field.field_type;
+            const requiredAttr = field.required ? "required" : "";
+            const requiredMark = field.required ? " *" : "";
+            const html = `
+                <div class="dynamic-field" style="margin-bottom: 10px;">
+                    <label>${field.label}${requiredMark}:
+                        <input
+                            type="${inputType}"
+                            data-label="${field.label}"
+                            ${requiredAttr}
+                        />
+                    </label>
+                </div>
+            `;
+            container.append(html);
+        });
+    }
+
+    $("#form-selector").on("change", function () {
+        const formId = $(this).val();
+        $("#success-message").hide();
+        $("#error-message").hide();
+        $("#dynamic-fields").empty();
+
+        if (!formId) {
+            return;
+        }
+
+        $.ajax({
+            url: `/employee/forms/${formId}/fields/`,
+            method: "GET",
+            success: function (response) {
+                renderFields(response.fields || []);
+            },
+            error: function () {
+                $("#error-message").text("Unable to load selected form fields.").show();
+            }
+        });
+    });
+
+    $("#employee-form").on("submit", function (e) {
+        e.preventDefault();
+        const formId = $("#form-selector").val();
+        const answers = {};
+
+        if (!formId) {
+            $("#error-message").text("Please select a form.").show();
+            $("#success-message").hide();
+            return;
+        }
+
+        $("#dynamic-fields input").each(function () {
+            answers[$(this).data("label")] = $(this).val();
+        });
+
+        const payload = {
+            form_id: formId,
+            answers: answers,
+            username: $("#acct-username").val(),
+            email: $("#acct-email").val(),
+            first_name: $("#acct-first").val(),
+            last_name: $("#acct-last").val(),
+            password: $("#acct-password").val(),
+        };
+
+        $.ajax({
+            url: "{% url 'employee-submit' %}",
+            method: "POST",
+            contentType: "application/json",
+            headers: {"X-CSRFToken": getCookie("csrftoken")},
+            data: JSON.stringify(payload),
+            success: function () {
+                $("#success-message").text("Employee details saved successfully.").show();
+                $("#error-message").hide();
+                $("#employee-form")[0].reset();
+                $("#dynamic-fields").empty();
+            },
+            error: function (xhr) {
+                const msg = formatApiErrors(xhr.responseJSON);
+                $("#error-message").text(msg).css("white-space", "pre-line").show();
+                $("#success-message").hide();
+            }
+        });
+    });
+});
+</script>
+
+</body>
+</html>
